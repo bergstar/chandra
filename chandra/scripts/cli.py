@@ -39,6 +39,26 @@ def get_supported_files(input_path: Path) -> List[Path]:
         raise click.BadParameter(f"Path does not exist: {input_path}")
 
 
+def load_prompt_text(prompt_file: Path | None) -> str | None:
+    """Load a custom prompt from disk if one is provided."""
+    if prompt_file is None:
+        return None
+
+    prompt = prompt_file.read_text(encoding="utf-8").strip()
+    if not prompt:
+        raise click.BadParameter(f"Prompt file is empty: {prompt_file}")
+
+    return prompt
+
+
+def build_batch_items(batch_images: List, prompt: str | None) -> List[BatchInputItem]:
+    """Build inference inputs using either the default OCR prompt or a custom prompt."""
+    if prompt is None:
+        return [BatchInputItem(image=img, prompt_type="ocr_layout") for img in batch_images]
+
+    return [BatchInputItem(image=img, prompt=prompt) for img in batch_images]
+
+
 def save_merged_output(
     output_dir: Path,
     file_name: str,
@@ -126,6 +146,28 @@ def save_merged_output(
     click.echo(f"  Saved: {markdown_path} ({len(results)} page(s))")
 
 
+def save_prompt_output(
+    output_dir: Path,
+    file_name: str,
+    results: List,
+    paginate_output: bool = False,
+):
+    """Save raw model output for custom prompts without post-processing."""
+    safe_name = Path(file_name).stem
+    file_output_dir = output_dir / safe_name
+    file_output_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = file_output_dir / f"{safe_name}.txt"
+    with open(raw_path, "w", encoding="utf-8") as f:
+        for page_num, result in enumerate(results):
+            if page_num > 0:
+                f.write("\n\n")
+                if paginate_output:
+                    f.write(f"{page_num}" + "-" * 48 + "\n\n")
+            f.write(result.raw)
+
+    click.echo(f"  Saved: {raw_path} ({len(results)} page(s))")
+
+
 @click.command()
 @click.argument("input_path", type=click.Path(exists=True, path_type=Path))
 @click.argument("output_path", type=click.Path(path_type=Path))
@@ -185,6 +227,12 @@ def save_merged_output(
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--prompt-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Load a custom prompt from a text file instead of the built-in OCR layout prompt.",
+)
 def main(
     input_path: Path,
     output_path: Path,
@@ -198,6 +246,7 @@ def main(
     save_html: bool,
     batch_size: int,
     paginate_output: bool,
+    prompt_file: Path | None,
 ):
     if method == "hf":
         click.echo(
@@ -216,6 +265,7 @@ def main(
 
     # Create output directory
     output_path.mkdir(parents=True, exist_ok=True)
+    prompt = load_prompt_text(prompt_file)
 
     # Load model
     click.echo(f"\nLoading model with method '{method}'...")
@@ -251,10 +301,7 @@ def main(
                 batch_images = images[batch_start:batch_end]
 
                 # Create batch input items
-                batch = [
-                    BatchInputItem(image=img, prompt_type="ocr_layout")
-                    for img in batch_images
-                ]
+                batch = build_batch_items(batch_images, prompt)
 
                 # Run inference
                 click.echo(f"  Processing pages {batch_start + 1}-{batch_end}...")
@@ -278,14 +325,22 @@ def main(
                 all_results.extend(results)
 
             # Save merged output for all pages
-            save_merged_output(
-                output_path,
-                file_path.name,
-                all_results,
-                save_images=include_images,
-                save_html=save_html,
-                paginate_output=paginate_output,
-            )
+            if prompt is None:
+                save_merged_output(
+                    output_path,
+                    file_path.name,
+                    all_results,
+                    save_images=include_images,
+                    save_html=save_html,
+                    paginate_output=paginate_output,
+                )
+            else:
+                save_prompt_output(
+                    output_path,
+                    file_path.name,
+                    all_results,
+                    paginate_output=paginate_output,
+                )
 
             click.echo(f"  Completed: {file_path.name}")
 

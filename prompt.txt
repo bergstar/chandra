@@ -1,0 +1,25 @@
+Analyze this Telemost screenshot and return JSON object. Keep the original language, Russian Cyrillic.
+Reply with this JSON format:
+```
+{
+  "speaking": ["Name"],
+  "screenshare": false,
+  "participants": [
+    {
+      "name": "Name",
+      "speaking": true,
+      "avatar_kind": "initials",
+      "avatar_color": "#HEX",
+      "avatar_initials": "ABC"
+    }
+  ]
+}
+```
+Rules:
+- Names: copy exactly as visible. Do not guess hidden participants.
+- Set `speaking: true` only if the tile has a bright, clearly defined border.
+- Set `screenshare: true` only if screen sharing is clearly visible.
+- `participants` must include all clearly visible participants.
+- `avatar_kind`: one of `initials`, `photo`, `illustration`, `unknown`.
+- If unsure about any of the values set `unknown`.
+- Do not escpape json, keep it utf-8.
