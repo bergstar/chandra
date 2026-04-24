@@ -6,6 +6,52 @@ from chandra.prompts import PROMPT_MAPPING
 from chandra.settings import settings
 
 
+def apply_chat_template(processor, conversations):
+    """Handle HF processor API differences across Transformers versions."""
+    try:
+        return processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            processor_kwargs={
+                "return_tensors": "pt",
+                "padding": True,
+            },
+        )
+    except TypeError as exc:
+        if "processor_kwargs" not in str(exc):
+            raise
+
+        return processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        )
+
+
+def get_pad_token_id(model, eos_token_id):
+    """Pick a stable pad token id so generation does not warn on open-ended runs."""
+    pad_token_id = model.generation_config.pad_token_id
+    if pad_token_id is None:
+        pad_token_id = model.processor.tokenizer.pad_token_id
+    if pad_token_id is None:
+        tokenizer_eos = model.processor.tokenizer.eos_token_id
+        if isinstance(tokenizer_eos, list):
+            pad_token_id = tokenizer_eos[0]
+        else:
+            pad_token_id = tokenizer_eos
+    if pad_token_id is None:
+        if isinstance(eos_token_id, list):
+            pad_token_id = eos_token_id[0]
+        else:
+            pad_token_id = eos_token_id
+    return pad_token_id
+
+
 def generate_hf(
     batch: List[BatchInputItem],
     model,
@@ -18,14 +64,7 @@ def generate_hf(
 
     conversations = [[process_batch_element(item)] for item in batch]
 
-    inputs = model.processor.apply_chat_template(
-        conversations,
-        tokenize=True,
-        add_generation_prompt=True,
-        return_dict=True,
-        return_tensors="pt",
-        padding=True,
-    )
+    inputs = apply_chat_template(model.processor, conversations)
     inputs = inputs.to(model.device)
 
     # Include both <|endoftext|> and <|im_end|> as stop tokens.
@@ -36,9 +75,13 @@ def generate_hf(
         eos_token_id = [eos_token_id]
     if im_end_id is not None and im_end_id not in eos_token_id:
         eos_token_id.append(im_end_id)
+    pad_token_id = get_pad_token_id(model, eos_token_id)
 
     generated_ids = model.generate(
-        **inputs, max_new_tokens=max_output_tokens, eos_token_id=eos_token_id
+        **inputs,
+        max_new_tokens=max_output_tokens,
+        eos_token_id=eos_token_id,
+        pad_token_id=pad_token_id,
     )
     generated_ids_trimmed = [
         out_ids[len(in_ids) :]
