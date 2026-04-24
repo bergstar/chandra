@@ -33,6 +33,15 @@ def apply_chat_template(processor, conversations):
         )
 
 
+def serialize_conversation(processor, conversation):
+    """Render the exact chat-template string before tokenization."""
+    return processor.apply_chat_template(
+        conversation,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+
+
 def get_pad_token_id(model, eos_token_id):
     """Pick a stable pad token id so generation does not warn on open-ended runs."""
     pad_token_id = model.generation_config.pad_token_id
@@ -57,12 +66,19 @@ def generate_hf(
     model,
     max_output_tokens=None,
     bbox_scale: int = settings.BBOX_SCALE,
+    debug_prompt: bool = False,
     **kwargs,
 ) -> List[GenerationResult]:
     if max_output_tokens is None:
         max_output_tokens = settings.MAX_OUTPUT_TOKENS
 
     conversations = [[process_batch_element(item)] for item in batch]
+    serialized_prompts = None
+    if debug_prompt:
+        serialized_prompts = [
+            serialize_conversation(model.processor, conversation)
+            for conversation in conversations
+        ]
 
     inputs = apply_chat_template(model.processor, conversations)
     inputs = inputs.to(model.device)
@@ -93,8 +109,15 @@ def generate_hf(
         clean_up_tokenization_spaces=False,
     )
     results = [
-        GenerationResult(raw=out, token_count=len(ids), error=False)
-        for out, ids in zip(output_text, generated_ids_trimmed)
+        GenerationResult(
+            raw=out,
+            token_count=len(ids),
+            error=False,
+            debug_serialized_prompt=(
+                serialized_prompts[idx] if serialized_prompts is not None else None
+            ),
+        )
+        for idx, (out, ids) in enumerate(zip(output_text, generated_ids_trimmed))
     ]
     return results
 

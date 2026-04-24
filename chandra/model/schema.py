@@ -9,6 +9,7 @@ class GenerationResult:
     raw: str
     token_count: int
     error: bool = False
+    debug_serialized_prompt: str | None = None
 
 
 @dataclass
@@ -28,3 +29,4 @@ class BatchOutputItem:
     token_count: int
     images: dict
     error: bool
+    debug_serialized_prompt: str | None = None

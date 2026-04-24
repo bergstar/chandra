@@ -151,6 +151,7 @@ def save_prompt_output(
     file_name: str,
     results: List,
     paginate_output: bool = False,
+    debug_prompt: bool = False,
 ):
     """Save raw model output for custom prompts without post-processing."""
     safe_name = Path(file_name).stem
@@ -164,6 +165,20 @@ def save_prompt_output(
                 if paginate_output:
                     f.write(f"{page_num}" + "-" * 48 + "\n\n")
             f.write(result.raw)
+
+    if debug_prompt:
+        debug_path = file_output_dir / f"{safe_name}.prompt_debug.txt"
+        with open(debug_path, "w", encoding="utf-8") as f:
+            for page_num, result in enumerate(results):
+                if result.debug_serialized_prompt is None:
+                    continue
+                if page_num > 0:
+                    f.write("\n\n" + "=" * 80 + "\n\n")
+                f.write(f"Page {page_num + 1}\n")
+                f.write("-" * 80 + "\n")
+                f.write(result.debug_serialized_prompt)
+
+        click.echo(f"  Saved: {debug_path}")
 
     click.echo(f"  Saved: {raw_path} ({len(results)} page(s))")
 
@@ -233,6 +248,12 @@ def save_prompt_output(
     default=None,
     help="Load a custom prompt from a text file instead of the built-in OCR layout prompt.",
 )
+@click.option(
+    "--debug-prompt",
+    is_flag=True,
+    default=False,
+    help="Save the exact serialized chat-template prompt used for HF generation.",
+)
 def main(
     input_path: Path,
     output_path: Path,
@@ -247,6 +268,7 @@ def main(
     batch_size: int,
     paginate_output: bool,
     prompt_file: Path | None,
+    debug_prompt: bool,
 ):
     if method == "hf":
         click.echo(
@@ -320,6 +342,8 @@ def main(
                         generate_kwargs["max_workers"] = max_workers
                     if max_retries is not None:
                         generate_kwargs["max_retries"] = max_retries
+                elif debug_prompt:
+                    generate_kwargs["debug_prompt"] = True
 
                 results = model.generate(batch, **generate_kwargs)
                 all_results.extend(results)
@@ -340,6 +364,7 @@ def main(
                     file_path.name,
                     all_results,
                     paginate_output=paginate_output,
+                    debug_prompt=debug_prompt,
                 )
 
             click.echo(f"  Completed: {file_path.name}")

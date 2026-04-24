@@ -25,6 +25,7 @@ def build_argv() -> list[str]:
         METHOD,
         "--prompt-file",
         str(PROMPT_FILE),
+        "--debug-prompt",
     ]
 
 

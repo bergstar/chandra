@@ -60,6 +60,7 @@ class InferenceManager:
                     token_count=result.token_count,
                     images=extract_images(result.raw, chunks, input_item.image),
                     error=result.error,
+                    debug_serialized_prompt=result.debug_serialized_prompt,
                 )
             )
         return output
