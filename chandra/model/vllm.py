@@ -21,6 +21,26 @@ def image_to_base64(image: Image.Image) -> str:
     return base64.b64encode(buffered.getvalue()).decode()
 
 
+def build_content(item: BatchInputItem) -> list[dict]:
+    """Preserve the OCR path, but use text-first ordering for ad hoc prompts."""
+    prompt = item.prompt
+    if not prompt:
+        prompt = PROMPT_MAPPING[item.prompt_type]
+
+    image = scale_to_fit(item.image)
+    image_b64 = image_to_base64(image)
+    image_item = {
+        "type": "image_url",
+        "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+    }
+    text_item = {"type": "text", "text": prompt}
+
+    if item.prompt is not None:
+        return [text_item, image_item]
+
+    return [image_item, text_item]
+
+
 def generate_vllm(
     batch: List[BatchInputItem],
     max_output_tokens: int = None,
@@ -54,21 +74,7 @@ def generate_vllm(
         model_name = models.data[0].id
 
     def _generate(item: BatchInputItem, temperature, top_p) -> GenerationResult:
-        prompt = item.prompt
-        if not prompt:
-            prompt = PROMPT_MAPPING[item.prompt_type]
-
-        content = []
-        image = scale_to_fit(item.image)
-        image_b64 = image_to_base64(image)
-        content.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{image_b64}"},
-            }
-        )
-
-        content.append({"type": "text", "text": prompt})
+        content = build_content(item)
 
         try:
             completion = client.chat.completions.create(

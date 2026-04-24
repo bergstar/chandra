@@ -99,18 +99,29 @@ def generate_hf(
     return results
 
 
-def process_batch_element(item: BatchInputItem):
+def build_content(item: BatchInputItem):
+    """Preserve the OCR path, but use text-first ordering for ad hoc prompts."""
     prompt = item.prompt
     prompt_type = item.prompt_type
 
     if not prompt:
         prompt = PROMPT_MAPPING[prompt_type]
 
-    content = []
     image = scale_to_fit(item.image)  # Guarantee max size
-    content.append({"type": "image", "image": image})
-    content.append({"type": "text", "text": prompt})
-    return {"role": "user", "content": content}
+    if item.prompt is not None:
+        return [
+            {"type": "text", "text": prompt},
+            {"type": "image", "image": image},
+        ]
+
+    return [
+        {"type": "image", "image": image},
+        {"type": "text", "text": prompt},
+    ]
+
+
+def process_batch_element(item: BatchInputItem):
+    return {"role": "user", "content": build_content(item)}
 
 
 def load_model():
