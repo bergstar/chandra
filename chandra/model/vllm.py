@@ -22,12 +22,12 @@ def image_to_base64(image: Image.Image) -> str:
 
 
 def build_content(item: BatchInputItem) -> list[dict]:
-    """Preserve the OCR path, but use text-first ordering for ad hoc prompts."""
+    """Preserve the OCR path, but keep custom prompts closer to raw VLM usage."""
     prompt = item.prompt
     if not prompt:
         prompt = PROMPT_MAPPING[item.prompt_type]
 
-    image = scale_to_fit(item.image)
+    image = item.image if item.prompt is not None else scale_to_fit(item.image)
     image_b64 = image_to_base64(image)
     image_item = {
         "type": "image_url",

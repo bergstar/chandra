@@ -123,20 +123,20 @@ def generate_hf(
 
 
 def build_content(item: BatchInputItem):
-    """Preserve the OCR path, but use text-first ordering for ad hoc prompts."""
+    """Preserve the OCR path, but keep custom prompts closer to raw VLM usage."""
     prompt = item.prompt
     prompt_type = item.prompt_type
 
     if not prompt:
         prompt = PROMPT_MAPPING[prompt_type]
 
-    image = scale_to_fit(item.image)  # Guarantee max size
     if item.prompt is not None:
         return [
             {"type": "text", "text": prompt},
-            {"type": "image", "image": image},
+            {"type": "image", "image": item.image},
         ]
 
+    image = scale_to_fit(item.image)  # Guarantee max size for the OCR pipeline
     return [
         {"type": "image", "image": image},
         {"type": "text", "text": prompt},
